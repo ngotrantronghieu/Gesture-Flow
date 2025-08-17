@@ -8,14 +8,14 @@ from PySide6.QtCore import QTimer, QThread, Signal, Qt
 from PySide6.QtCore import QSettings
 import json
 
-from PySide6.QtGui import QImage, QPixmap, QFont
+from PySide6.QtGui import QImage, QPixmap, QFont, QIcon
 import mediapipe as mp
 import time
 import math
 from typing import Optional, Dict, List, Tuple
 from config import (WEBCAM_CONFIG, MEDIAPIPE_CONFIG, GESTURE_CONFIG,
                    PERFORMANCE_CONFIG, UI_CONFIG, PREDEFINED_GESTURES, CUSTOM_GESTURE_CONFIG,
-                   ACTION_EXECUTION_CONFIG, VISUAL_FEEDBACK_CONFIG, MOUSE_CONTROL_CONFIG)
+                   ACTION_EXECUTION_CONFIG, VISUAL_FEEDBACK_CONFIG, MOUSE_CONTROL_CONFIG, ASSETS_CONFIG)
 from custom_gesture_manager import CustomGestureManager
 from gesture_recording_dialog import GestureRecordingDialog
 from gesture_management_dialog import GestureManagementDialog
@@ -536,8 +536,8 @@ class MainWindow(QMainWindow):
         self.gesture_label.setStyleSheet("color: blue; font-weight: bold;")
         gesture_layout.addWidget(self.gesture_label)
 
-        # Supported gestures list
-        supported_label = QLabel("Supported Gestures:")
+        # Default Supported gestures list
+        supported_label = QLabel("Default Supported Gestures:")
         supported_label.setFont(QFont("Arial", 10, QFont.Bold))
         gesture_layout.addWidget(supported_label)
 
@@ -1322,8 +1322,28 @@ def main():
     app.setApplicationVersion("0.1.0")
     app.setOrganizationName("GestureFlow Team")
 
+    # Set application icon (global) if available
+    try:
+        from os.path import exists
+        icon_path = ASSETS_CONFIG.get('app_icon_path')
+        if icon_path and exists(icon_path):
+            app_icon = QIcon(icon_path)
+            if not app_icon.isNull():
+                app.setWindowIcon(app_icon)
+        else:
+            if icon_path:
+                print(f"App icon not found at: {icon_path}")
+    except Exception as e:
+        print(f"Failed to set application icon: {e}")
+
     # Create and show main window
     window = MainWindow()
+    # Also set main window icon explicitly for taskbar reliability on Windows
+    try:
+        if 'app_icon' in locals() and not app_icon.isNull():
+            window.setWindowIcon(app_icon)
+    except Exception:
+        pass
     window.show()
 
     # Run application

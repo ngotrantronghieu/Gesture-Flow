@@ -250,3 +250,9 @@ MOUSE_CONTROL_CONFIG = {
     'activation_frames': 3,          # Frames required to activate control
     'deactivation_frames': 2         # Frames required to deactivate control
 }
+
+# ... existing code ...
+ASSETS_CONFIG = {
+    'assets_directory': os.path.join(PROJECT_ROOT, 'assets'),
+    'app_icon_path': os.path.join(PROJECT_ROOT, 'assets', 'app_icon.svg'),
+}
