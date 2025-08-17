@@ -2,6 +2,8 @@
 
 A desktop application for real‑time hand gesture recognition and automation. Use your webcam to detect gestures and trigger system actions like keyboard shortcuts, mouse operations, launching apps, and more. Build custom gestures, manage profiles, and compose macro sequences — all with a modern Qt (PySide6) UI.
 
+<img width="1252" height="914" alt="image" src="https://github.com/user-attachments/assets/d35ab01b-8df8-4d57-b414-0e0c53d7f2dd" />
+
 ## Key Features
 - Real‑time hand tracking and gesture recognition (MediaPipe + OpenCV)
 - Predefined gesture support (e.g., open palm, fist, thumbs up, peace sign, pointing)
@@ -96,6 +98,3 @@ On first launch:
 
 ## Contributing
 Issues and pull requests are welcome. Please describe reproduction steps and include logs if relevant.
-
-## License
-No license file is included. All rights reserved by the project authors unless a LICENSE is added.
