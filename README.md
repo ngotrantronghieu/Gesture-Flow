@@ -1,4 +1,4 @@
-# GestureFlow
+# Gesture Flow
 
 A desktop application for real‑time hand gesture recognition and automation. Use your webcam to detect gestures and trigger system actions like keyboard shortcuts, mouse operations, launching apps, and more. Build custom gestures, manage profiles, and compose macro sequences — all with a modern Qt (PySide6) UI.
 
