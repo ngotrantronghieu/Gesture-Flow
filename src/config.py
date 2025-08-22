@@ -52,7 +52,7 @@ CUSTOM_GESTURE_CONFIG = {
     'samples_per_gesture': 20,          # Number of samples to collect per gesture
     'sample_delay_seconds': 1.5,        # Time delay between samples (enhanced UX)
     'recording_countdown': 3,            # Countdown before recording starts
-    'min_confidence_threshold': 0.6,    # Minimum confidence for recognition
+    'min_confidence_threshold': 0.4,    # Minimum confidence for recognition (lowered from 0.6)
     'feature_vector_size': 42,           # 21 landmarks × 2 coordinates (x,y)
     'similarity_threshold': 0.85,        # Threshold for gesture ambiguity detection
     'svm_kernel': 'rbf',                # SVM kernel type
@@ -60,8 +60,8 @@ CUSTOM_GESTURE_CONFIG = {
     'cross_validation_folds': 5,        # K-fold cross-validation
     'max_gesture_name_length': 50,      # Maximum length for gesture names
     'backup_enabled': True,             # Enable automatic backup of gesture data
-    'predefined_confidence_boost': 0.1, # Boost predefined gesture confidence to prefer them over custom
-    'enable_gesture_priority': True,    # Enable priority system (predefined > custom when close)
+    'predefined_confidence_boost': 0.0, # Boost predefined gesture confidence to prefer them over custom (disabled)
+    'enable_gesture_priority': False,   # Enable priority system (predefined > custom when close) - disabled to allow custom gestures
 }
 
 # Gesture Definitions (GFLOW-3)

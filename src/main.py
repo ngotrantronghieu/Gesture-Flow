@@ -274,8 +274,16 @@ class GestureRecognizer:
         middle_extended = landmarks[12][1] < landmarks[10][1]
         ring_folded = landmarks[16][1] > landmarks[14][1]
         pinky_folded = landmarks[20][1] > landmarks[18][1]
-
-        return index_extended and middle_extended and ring_folded and pinky_folded
+        
+        # For peace sign, thumb should also be folded (not extended like in "three" gesture)
+        wrist = landmarks[0]
+        thumb_tip = landmarks[4]
+        thumb_mcp = landmarks[2]
+        
+        # Thumb should be close to palm (folded), not extended away
+        thumb_folded = abs(thumb_tip[0] - wrist[0]) < 0.1  # Thumb close to wrist horizontally
+        
+        return index_extended and middle_extended and ring_folded and pinky_folded and thumb_folded
 
     def _is_thumbs_up(self, landmarks) -> bool:
         """Check if hand shows thumbs up gesture"""
