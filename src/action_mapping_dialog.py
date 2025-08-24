@@ -102,11 +102,43 @@ class SubActionDialog(QDialog):
         self.sub_kb_action = QComboBox()
         kb_actions = ACTION_TYPES_CONFIG.get('keyboard', {}).get('actions', [])
         self.sub_kb_action.addItems([a.replace('_', ' ').title() for a in kb_actions])
+        
+        # Key selection dropdowns
+        self.sub_modifier_keys = QComboBox()
+        self.sub_modifier_keys.setEditable(True)
+        self.sub_modifier_keys.addItems([
+            "", "ctrl", "alt", "shift", "win", "cmd",
+            "ctrl+alt", "ctrl+shift", "alt+shift", "ctrl+win", "alt+win", "shift+win",
+            "ctrl+alt+shift"
+        ])
+        
+        self.sub_main_key = QComboBox()
+        self.sub_main_key.setEditable(True)
+        # Same key list as main dialog
+        common_keys = [
+            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+            "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+            "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+            "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+            "up", "down", "left", "right", "home", "end", "page_up", "page_down",
+            "enter", "return", "space", "tab", "backspace", "delete", "insert",
+            "escape", "esc", "caps_lock", "num_lock", "scroll_lock", "print_screen",
+            "comma", "period", "semicolon", "apostrophe", "grave", "minus", "equal",
+            "left_bracket", "right_bracket", "backslash", "slash"
+        ]
+        self.sub_main_key.addItems(common_keys)
+        
+        # Fallback text input (hidden by default)
         self.sub_kb_keys = QLineEdit(); self.sub_kb_keys.setPlaceholderText("e.g., ctrl+c or alt+tab or enter")
+        self.sub_kb_keys.setVisible(False)
+        
         self.sub_kb_text = QTextEdit(); self.sub_kb_text.setMaximumHeight(60); self.sub_kb_text.setPlaceholderText("Text to type…")
         self.sub_kb_interval = QDoubleSpinBox(); self.sub_kb_interval.setRange(0.0, 1.0); self.sub_kb_interval.setValue(0.05); self.sub_kb_interval.setSuffix(" seconds")
+        
         kb_form.addRow("Action:", self.sub_kb_action)
-        kb_form.addRow("Keys:", self.sub_kb_keys)
+        kb_form.addRow("Modifier Keys:", self.sub_modifier_keys)
+        kb_form.addRow("Main Key:", self.sub_main_key)
+        kb_form.addRow("Custom Keys:", self.sub_kb_keys)
         kb_form.addRow("Text:", self.sub_kb_text)
         kb_form.addRow("Key Interval:", self.sub_kb_interval)
 
@@ -196,9 +228,40 @@ class SubActionDialog(QDialog):
         elif action.type == ActionType.KEYBOARD:
             self.sub_kb_action.setCurrentText(action.subtype.replace('_', ' ').title())
             p: KeyboardActionParameters = action.parameters
-            # If list, join with + for display
+            
+            # Handle different action types differently
+            if action.subtype == 'key_press':
+                # Key press: only main key, no modifiers
+                keys_value = p.keys if isinstance(p.keys, list) else [p.keys] if p.keys else []
+                main_key = keys_value[0] if keys_value else ""
+                
+                self.sub_modifier_keys.setCurrentText("")  # No modifiers for key press
+                self.sub_main_key.setCurrentText(main_key)
+                
+            elif action.subtype == 'key_combination':
+                # Key combination: use both modifiers and main key
+                keys_value = p.keys if isinstance(p.keys, list) else [p.keys] if p.keys else []
+                modifiers_value = getattr(p, 'modifiers', []) or []
+                
+                # Set modifier keys
+                modifiers_str = '+'.join([str(m) for m in modifiers_value]) if modifiers_value else ""
+                self.sub_modifier_keys.setCurrentText(modifiers_str)
+                
+                # Set main key
+                main_key = keys_value[0] if keys_value else ""
+                self.sub_main_key.setCurrentText(main_key)
+                
+            else:
+                # Other actions or fallback
+                self.sub_modifier_keys.setCurrentText("")
+                self.sub_main_key.setCurrentText("")
+            
+            # Set fallback text field (for debugging/compatibility)
             keys_value = p.keys if isinstance(p.keys, list) else [p.keys] if p.keys else []
-            self.sub_kb_keys.setText('+'.join([str(k) for k in keys_value]) if keys_value else "")
+            modifiers_value = getattr(p, 'modifiers', []) or []
+            all_keys = modifiers_value + keys_value
+            self.sub_kb_keys.setText('+'.join([str(k) for k in all_keys]) if all_keys else "")
+            
             self.sub_kb_text.setPlainText(getattr(p, 'text', '') or '')
             self.sub_kb_interval.setValue(getattr(p, 'interval', 0.05) or 0.05)
         elif action.type == ActionType.APPLICATION:
@@ -248,15 +311,33 @@ class SubActionDialog(QDialog):
                     params = MouseActionParameters()
             elif action_type == ActionType.KEYBOARD:
                 subtype = self.sub_kb_action.currentText().lower().replace(' ', '_')
-                keys_text = self.sub_kb_keys.text().strip()
-                if subtype in ('key_press', 'key_combination'):
-                    if '+' in keys_text:
-                        parts = [k.strip() for k in keys_text.split('+') if k.strip()]
-                        modifiers = parts[:-1] if len(parts) > 1 else []
-                        keys = [parts[-1]] if parts else []
-                    else:
-                        modifiers = []
-                        keys = [keys_text] if keys_text else []
+                
+                if subtype == 'key_press':
+                    # Key press: only use the main key, no modifiers
+                    main_key_text = self.sub_main_key.currentText().strip()
+                    keys = [main_key_text] if main_key_text else []
+                    
+                    params = KeyboardActionParameters(
+                        keys=keys,
+                        text="",
+                        modifiers=[],
+                        interval=self.sub_kb_interval.value(),
+                    )
+                elif subtype == 'key_combination':
+                    # Key combination: use both modifiers and main key
+                    modifier_text = self.sub_modifier_keys.currentText().strip()
+                    main_key_text = self.sub_main_key.currentText().strip()
+                    
+                    # Build modifiers list
+                    modifiers = []
+                    if modifier_text:
+                        modifiers = [m.strip() for m in modifier_text.split('+') if m.strip()]
+                    
+                    # Build keys list
+                    keys = []
+                    if main_key_text:
+                        keys = [main_key_text]
+                    
                     params = KeyboardActionParameters(
                         keys=keys,
                         text="",
@@ -323,18 +404,37 @@ class SubActionDialog(QDialog):
 
     def _update_keyboard_fields(self):
         subtype = self.sub_kb_action.currentText().lower().replace(' ', '_')
-        is_key_action = subtype in ('key_press', 'key_combination')
+        is_key_press = subtype == 'key_press'
+        is_key_combination = subtype == 'key_combination'
         is_type_text = subtype == 'type_text'
-        # Show/hide fields
-        self.sub_kb_keys.setVisible(is_key_action)
+        
+        # Show/hide key selection fields based on action type
+        self.sub_modifier_keys.setVisible(is_key_combination)  # Only for key combinations
+        self.sub_main_key.setVisible(is_key_press or is_key_combination)  # For both key actions
+        self.sub_kb_keys.setVisible(False)  # Keep custom keys hidden
         self.sub_kb_text.setVisible(is_type_text)
+        
         # Toggle labels
         form = self.sub_kb_action.parent().layout()
         try:
+            # Row indices: 0=Action, 1=Modifier Keys, 2=Main Key, 3=Custom Keys, 4=Text, 5=Key Interval
+            # Modifier Keys row (index 1) - only for key combinations
             label_item = form.itemAt(1, QFormLayout.LabelRole)
             if label_item and label_item.widget():
-                label_item.widget().setVisible(is_key_action)
+                label_item.widget().setVisible(is_key_combination)
+            
+            # Main Key row (index 2) - for both key press and key combination
             label_item = form.itemAt(2, QFormLayout.LabelRole)
+            if label_item and label_item.widget():
+                label_item.widget().setVisible(is_key_press or is_key_combination)
+            
+            # Custom Keys row (index 3) - always hidden
+            label_item = form.itemAt(3, QFormLayout.LabelRole)
+            if label_item and label_item.widget():
+                label_item.widget().setVisible(False)
+            
+            # Text row (index 4)
+            label_item = form.itemAt(4, QFormLayout.LabelRole)
             if label_item and label_item.widget():
                 label_item.widget().setVisible(is_type_text)
         except Exception:
@@ -364,6 +464,7 @@ class ActionMappingDialog(QDialog):
         self._mouse_listener = None
         self._keyboard_listener = None
         self._last_click_time = None
+        self._pressed_modifiers = set()  # Track currently pressed modifier keys
         self.profile_manager = profile_manager  # GFLOW-18: Unified profile manager
         self.action_executor = ActionExecutor()
         self.validator = ActionValidator()
@@ -634,8 +735,46 @@ class ActionMappingDialog(QDialog):
         keyboard_actions = ACTION_TYPES_CONFIG.get('keyboard', {}).get('actions', [])
         self.keyboard_action_combo.addItems([action.replace('_', ' ').title() for action in keyboard_actions])
 
+        # Key selection dropdowns for key press and key combination
+        self.modifier_keys_combo = QComboBox()
+        self.modifier_keys_combo.setEditable(True)
+        self.modifier_keys_combo.addItems([
+            "", "ctrl", "alt", "shift", "win", "cmd",
+            "ctrl+alt", "ctrl+shift", "alt+shift", "ctrl+win", "alt+win", "shift+win",
+            "ctrl+alt+shift"
+        ])
+        self.modifier_keys_combo.setCurrentText("")
+
+        self.main_key_combo = QComboBox()
+        self.main_key_combo.setEditable(True)
+        # Common keys organized by category
+        common_keys = [
+            # Letters
+            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+            "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+            # Numbers
+            "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+            # Function keys
+            "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+            # Navigation keys
+            "up", "down", "left", "right", "home", "end", "page_up", "page_down",
+            # Special keys
+            "enter", "return", "space", "tab", "backspace", "delete", "insert",
+            "escape", "esc", "caps_lock", "num_lock", "scroll_lock", "print_screen",
+            # Punctuation and symbols
+            "comma", "period", "semicolon", "apostrophe", "grave", "minus", "equal",
+            "left_bracket", "right_bracket", "backslash", "slash",
+            # Numpad
+            "numpad_0", "numpad_1", "numpad_2", "numpad_3", "numpad_4", "numpad_5",
+            "numpad_6", "numpad_7", "numpad_8", "numpad_9", "numpad_add", "numpad_subtract",
+            "numpad_multiply", "numpad_divide", "numpad_decimal", "numpad_enter"
+        ]
+        self.main_key_combo.addItems(common_keys)
+
+        # Fallback text input for custom keys (hidden by default)
         self.keys_edit = QLineEdit()
         self.keys_edit.setPlaceholderText("e.g., ctrl+c, enter, f1")
+        self.keys_edit.setVisible(False)
 
         self.text_edit = QTextEdit()
         self.text_edit.setMaximumHeight(80)
@@ -647,7 +786,9 @@ class ActionMappingDialog(QDialog):
         self.key_interval_spinbox.setSuffix(" seconds")
 
         layout.addRow("Action:", self.keyboard_action_combo)
-        layout.addRow("Keys:", self.keys_edit)
+        layout.addRow("Modifier Keys:", self.modifier_keys_combo)
+        layout.addRow("Main Key:", self.main_key_combo)
+        layout.addRow("Custom Keys:", self.keys_edit)
         layout.addRow("Text:", self.text_edit)
         layout.addRow("Key Interval:", self.key_interval_spinbox)
 
@@ -971,9 +1112,44 @@ class ActionMappingDialog(QDialog):
             except Exception:
                 pass
             params: KeyboardActionParameters = mapping.action.parameters
-            # Keys may be str or list
+            
+            # Handle different action types differently
             keys_value = params.keys if isinstance(params.keys, list) else [params.keys] if getattr(params, 'keys', None) else []
-            self.keys_edit.setText('+'.join([str(k) for k in keys_value]) if keys_value else "")
+            modifiers_value = getattr(params, 'modifiers', []) or []
+            
+            if mapping.action.subtype == 'key_press':
+                # Key press: only main key, no modifiers
+                main_key = keys_value[0] if keys_value else ""
+                
+                self.modifier_keys_combo.setCurrentText("")  # No modifiers for key press
+                self.main_key_combo.setCurrentText(main_key.lower() if main_key else "")
+                
+                # Set fallback text field
+                keys_str = main_key
+                
+            elif mapping.action.subtype == 'key_combination':
+                # Key combination: use both modifiers and main key
+                # Set modifiers
+                modifiers_str = '+'.join([str(m) for m in modifiers_value]) if modifiers_value else ""
+                self.modifier_keys_combo.setCurrentText(modifiers_str)
+                
+                # Set main key
+                main_key = keys_value[0] if keys_value else ""
+                self.main_key_combo.setCurrentText(main_key.lower() if main_key else "")
+                
+                # Set fallback text field
+                all_keys = modifiers_value + keys_value
+                keys_str = '+'.join([str(k) for k in all_keys]) if all_keys else ""
+                
+            else:
+                # Other actions or fallback
+                self.modifier_keys_combo.setCurrentText("")
+                self.main_key_combo.setCurrentText("")
+                keys_str = ""
+            
+            # Set fallback text field (hidden by default)
+            self.keys_edit.setText(keys_str)
+            
             self.text_edit.setPlainText(getattr(params, 'text', '') or '')
             self.key_interval_spinbox.setValue(getattr(params, 'interval', 0.05) or 0.05)
             # Update visibility
@@ -1055,38 +1231,50 @@ class ActionMappingDialog(QDialog):
     def update_keyboard_field_visibility(self):
         """Show only relevant keyboard fields per selected action"""
         subtype = self.keyboard_action_combo.currentText().lower().replace(' ', '_')
-        is_key_action = subtype in ('key_press', 'key_combination')
+        is_key_press = subtype == 'key_press'
+        is_key_combination = subtype == 'key_combination'
         is_type_text = subtype == 'type_text'
 
-        # Get widgets directly we own
-        # Keys row visibility
-        keys_visible = is_key_action
-        self.keys_edit.setVisible(keys_visible)
-        # Text row visibility
-        text_visible = is_type_text
-        self.text_edit.setVisible(text_visible)
-        # Keep interval visible for both kinds
+        # Show/hide key selection fields based on action type
+        self.modifier_keys_combo.setVisible(is_key_combination)  # Only for key combinations
+        self.main_key_combo.setVisible(is_key_press or is_key_combination)  # For both key actions
+        self.keys_edit.setVisible(False)  # Keep custom keys hidden by default
+        
+        # Show/hide text field for type text action
+        self.text_edit.setVisible(is_type_text)
+        
+        # Keep interval visible for all actions
         self.key_interval_spinbox.setVisible(True)
 
         # Also toggle corresponding labels by scanning the keyboard tab's form layout
-        # Find the keyboard tab's form layout - handle case where keyboard_tab might not exist yet
         keyboard_form = None
         if hasattr(self, 'keyboard_tab') and self.keyboard_tab:
             keyboard_form = self.keyboard_tab.layout()
-        elif hasattr(self, 'keys_edit') and self.keys_edit.parent():
-            # Fallback: get layout from the keys_edit parent widget
-            keyboard_form = self.keys_edit.parent().layout()
+        elif hasattr(self, 'modifier_keys_combo') and self.modifier_keys_combo.parent():
+            keyboard_form = self.modifier_keys_combo.parent().layout()
 
         if isinstance(keyboard_form, QFormLayout):
             try:
-                # Keys row label likely at index 1
+                # Row indices: 0=Action, 1=Modifier Keys, 2=Main Key, 3=Custom Keys, 4=Text, 5=Key Interval
+                # Modifier Keys row (index 1) - only for key combinations
                 label_item = keyboard_form.itemAt(1, QFormLayout.LabelRole)
                 if label_item and label_item.widget():
-                    label_item.widget().setVisible(keys_visible)
-                # Text row label likely at index 2
+                    label_item.widget().setVisible(is_key_combination)
+                
+                # Main Key row (index 2) - for both key press and key combination
                 label_item = keyboard_form.itemAt(2, QFormLayout.LabelRole)
                 if label_item and label_item.widget():
-                    label_item.widget().setVisible(text_visible)
+                    label_item.widget().setVisible(is_key_press or is_key_combination)
+                
+                # Custom Keys row (index 3) - always hidden for now
+                label_item = keyboard_form.itemAt(3, QFormLayout.LabelRole)
+                if label_item and label_item.widget():
+                    label_item.widget().setVisible(False)
+                
+                # Text row (index 4)
+                label_item = keyboard_form.itemAt(4, QFormLayout.LabelRole)
+                if label_item and label_item.widget():
+                    label_item.widget().setVisible(is_type_text)
             except Exception:
                 pass
 
@@ -1195,16 +1383,33 @@ class ActionMappingDialog(QDialog):
 
             elif action_type == ActionType.KEYBOARD:
                 subtype = self.keyboard_action_combo.currentText().lower().replace(' ', '_')
-                keys_text = self.keys_edit.text().strip()
-                if subtype in ('key_press', 'key_combination'):
-                    # Parse keys
-                    if '+' in keys_text:
-                        parts = [k.strip() for k in keys_text.split('+') if k.strip()]
-                        modifiers = parts[:-1] if len(parts) > 1 else []
-                        main_keys = [parts[-1]] if parts else []
-                    else:
-                        modifiers = []
-                        main_keys = [keys_text] if keys_text else []
+                
+                if subtype == 'key_press':
+                    # Key press: only use the main key, no modifiers
+                    main_key_text = self.main_key_combo.currentText().strip()
+                    main_keys = [main_key_text] if main_key_text else []
+                    
+                    parameters = KeyboardActionParameters(
+                        keys=main_keys,
+                        text="",
+                        modifiers=[],
+                        interval=self.key_interval_spinbox.value()
+                    )
+                elif subtype == 'key_combination':
+                    # Key combination: use both modifiers and main key
+                    modifier_text = self.modifier_keys_combo.currentText().strip()
+                    main_key_text = self.main_key_combo.currentText().strip()
+                    
+                    # Build modifiers list
+                    modifiers = []
+                    if modifier_text:
+                        modifiers = [m.strip() for m in modifier_text.split('+') if m.strip()]
+                    
+                    # Build main keys list
+                    main_keys = []
+                    if main_key_text:
+                        main_keys = [main_key_text]
+                    
                     parameters = KeyboardActionParameters(
                         keys=main_keys,
                         text="",
@@ -1322,6 +1527,9 @@ class ActionMappingDialog(QDialog):
         self.record_button.setEnabled(False)
         self.stop_record_button.setEnabled(True)
         self._last_click_time = time.time()
+        
+        # Track currently pressed modifier keys
+        self._pressed_modifiers = set()
 
         # Handlers
         def on_click(x, y, button, pressed):
@@ -1374,19 +1582,116 @@ class ActionMappingDialog(QDialog):
             try:
                 if not self.is_recording_macro:
                     return False
-                # Normalize key/modifiers
+                
+                # Get key name with robust detection
                 key_name = None
-                modifiers = []
-                if hasattr(key, 'char') and key.char:
-                    key_name = key.char
+                
+                # Try different methods to get the key name
+                if hasattr(key, 'name'):
+                    # Special keys like Key.enter, Key.space, etc.
+                    key_name = key.name.lower()
+                elif hasattr(key, 'char') and key.char:
+                    # Character keys - handle control characters
+                    char = key.char
+                    if char.isprintable() and len(char) == 1 and ord(char) >= 32:
+                        # Normal printable character
+                        key_name = char.lower()
+                    else:
+                        # Control character - try to map back to original key
+                        # Common control characters when Ctrl is pressed
+                        ctrl_char_map = {
+                            '\x01': 'a', '\x02': 'b', '\x03': 'c', '\x04': 'd', '\x05': 'e', '\x06': 'f',
+                            '\x07': 'g', '\x08': 'h', '\x09': 'i', '\x0a': 'j', '\x0b': 'k', '\x0c': 'l',
+                            '\x0d': 'm', '\x0e': 'n', '\x0f': 'o', '\x10': 'p', '\x11': 'q', '\x12': 'r',
+                            '\x13': 's', '\x14': 't', '\x15': 'u', '\x16': 'v', '\x17': 'w', '\x18': 'x',
+                            '\x19': 'y', '\x1a': 'z'
+                        }
+                        key_name = ctrl_char_map.get(char)
+                        
+                        if not key_name:
+                            # Try parsing from string representation as fallback
+                            key_str = str(key)
+                            if key_str.startswith("'") and key_str.endswith("'") and len(key_str) == 3:
+                                key_name = key_str[1].lower()
                 else:
-                    key_name = str(key).split('.')[-1]
-                params = KeyboardActionParameters(keys=[key_name], text="", modifiers=modifiers, interval=0.0)
-                action = Action(
-                    id=str(uuid.uuid4()), type=ActionType.KEYBOARD,
-                    subtype=KeyboardAction.KEY_PRESS.value, parameters=params,
-                    name=f"Key {key_name}", description=f"Key press: {key_name}"
-                )
+                    # Fallback: parse from string representation
+                    key_str = str(key)
+                    if '.' in key_str:
+                        key_name = key_str.split('.')[-1].lower()
+                    else:
+                        key_name = key_str.lower()
+                
+                # Handle special cases and normalize key names
+                if not key_name:
+                    return True  # Skip if we can't determine the key
+                
+                # Normalize some common key names
+                key_name_mapping = {
+                    'space': 'space',
+                    'enter': 'enter',
+                    'return': 'enter',
+                    'tab': 'tab',
+                    'backspace': 'backspace',
+                    'delete': 'delete',
+                    'esc': 'escape',
+                    'escape': 'escape'
+                }
+                key_name = key_name_mapping.get(key_name, key_name)
+                
+                # Check if this is a modifier key
+                modifier_keys = {
+                    'ctrl_l', 'ctrl_r', 'ctrl',
+                    'alt_l', 'alt_r', 'alt', 'alt_gr',
+                    'shift_l', 'shift_r', 'shift',
+                    'cmd_l', 'cmd_r', 'cmd',
+                    'win_l', 'win_r', 'win'
+                }
+                
+                if key_name.lower() in modifier_keys:
+                    # Track modifier key press
+                    normalized_modifier = key_name.lower()
+                    # Normalize left/right variants to base modifier
+                    if normalized_modifier.endswith('_l') or normalized_modifier.endswith('_r'):
+                        normalized_modifier = normalized_modifier.split('_')[0]
+                    self._pressed_modifiers.add(normalized_modifier)
+                    return True  # Don't record modifier keys by themselves
+                
+                # This is a regular key - check if modifiers are pressed
+                current_modifiers = list(self._pressed_modifiers)
+                
+                if current_modifiers:
+                    # Key combination detected
+                    params = KeyboardActionParameters(
+                        keys=[key_name], 
+                        text="", 
+                        modifiers=current_modifiers, 
+                        interval=0.0
+                    )
+                    action = Action(
+                        id=str(uuid.uuid4()), 
+                        type=ActionType.KEYBOARD,
+                        subtype=KeyboardAction.KEY_COMBINATION.value, 
+                        parameters=params,
+                        name=f"Key Combination {'+'.join(current_modifiers + [key_name])}", 
+                        description=f"Key combination: {'+'.join(current_modifiers + [key_name])}"
+                    )
+                else:
+                    # Single key press
+                    params = KeyboardActionParameters(
+                        keys=[key_name], 
+                        text="", 
+                        modifiers=[], 
+                        interval=0.0
+                    )
+                    action = Action(
+                        id=str(uuid.uuid4()), 
+                        type=ActionType.KEYBOARD,
+                        subtype=KeyboardAction.KEY_PRESS.value, 
+                        parameters=params,
+                        name=f"Key {key_name}", 
+                        description=f"Key press: {key_name}"
+                    )
+                
                 is_valid, _ = self.validator.validate_action(action)
                 if is_valid:
                     self.macro_sequence.append(action.to_dict())
@@ -1395,10 +1700,75 @@ class ActionMappingDialog(QDialog):
             except Exception:
                 return True
 
+        def on_release(key):
+            try:
+                if not self.is_recording_macro:
+                    return False
+                
+                # Get key name with robust detection (same as on_press)
+                key_name = None
+                
+                # Try different methods to get the key name
+                if hasattr(key, 'name'):
+                    # Special keys like Key.enter, Key.space, etc.
+                    key_name = key.name.lower()
+                elif hasattr(key, 'char') and key.char:
+                    # Character keys - handle control characters
+                    char = key.char
+                    if char.isprintable() and len(char) == 1 and ord(char) >= 32:
+                        # Normal printable character
+                        key_name = char.lower()
+                    else:
+                        # Control character - try to map back to original key
+                        ctrl_char_map = {
+                            '\x01': 'a', '\x02': 'b', '\x03': 'c', '\x04': 'd', '\x05': 'e', '\x06': 'f',
+                            '\x07': 'g', '\x08': 'h', '\x09': 'i', '\x0a': 'j', '\x0b': 'k', '\x0c': 'l',
+                            '\x0d': 'm', '\x0e': 'n', '\x0f': 'o', '\x10': 'p', '\x11': 'q', '\x12': 'r',
+                            '\x13': 's', '\x14': 't', '\x15': 'u', '\x16': 'v', '\x17': 'w', '\x18': 'x',
+                            '\x19': 'y', '\x1a': 'z'
+                        }
+                        key_name = ctrl_char_map.get(char)
+                        
+                        if not key_name:
+                            # Try parsing from string representation as fallback
+                            key_str = str(key)
+                            if key_str.startswith("'") and key_str.endswith("'") and len(key_str) == 3:
+                                key_name = key_str[1].lower()
+                else:
+                    # Fallback: parse from string representation
+                    key_str = str(key)
+                    if '.' in key_str:
+                        key_name = key_str.split('.')[-1].lower()
+                    else:
+                        key_name = key_str.lower()
+                
+                if not key_name:
+                    return True  # Skip if we can't determine the key
+                
+                # Remove modifier from tracking when released
+                modifier_keys = {
+                    'ctrl_l', 'ctrl_r', 'ctrl',
+                    'alt_l', 'alt_r', 'alt', 'alt_gr',
+                    'shift_l', 'shift_r', 'shift',
+                    'cmd_l', 'cmd_r', 'cmd',
+                    'win_l', 'win_r', 'win'
+                }
+                
+                if key_name.lower() in modifier_keys:
+                    normalized_modifier = key_name.lower()
+                    # Normalize left/right variants to base modifier
+                    if normalized_modifier.endswith('_l') or normalized_modifier.endswith('_r'):
+                        normalized_modifier = normalized_modifier.split('_')[0]
+                    self._pressed_modifiers.discard(normalized_modifier)
+                
+                return True
+            except Exception:
+                return True
+
         # Start listeners
         try:
             self._mouse_listener = MouseListener(on_click=on_click, on_move=on_move, on_scroll=on_scroll)
-            self._keyboard_listener = KeyboardListener(on_press=on_press)
+            self._keyboard_listener = KeyboardListener(on_press=on_press, on_release=on_release)
             self._mouse_listener.start()
             self._keyboard_listener.start()
         except Exception as e:
@@ -1413,6 +1783,11 @@ class ActionMappingDialog(QDialog):
         self.is_recording_macro = False
         self.record_button.setEnabled(True)
         self.stop_record_button.setEnabled(False)
+        
+        # Clear modifier tracking
+        if hasattr(self, '_pressed_modifiers'):
+            self._pressed_modifiers.clear()
+        
         try:
             if self._mouse_listener:
                 self._mouse_listener.stop()
